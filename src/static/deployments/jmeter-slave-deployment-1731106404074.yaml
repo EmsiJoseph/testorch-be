@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jmeter-slave
+  namespace: perf-platform  
+spec:
+  replicas: 1  
+  selector:
+    matchLabels:
+      app: jmeter-slave
+  template:
+    metadata:
+      labels:
+        app: jmeter-slave
+    spec:
+      containers:
+      - name: jmeter-slave
+        image: justb4/jmeter:latest
+        ports:
+          - containerPort: 1099  
+        env:
+          - name: MASTER_IP
+            value: "jmeter-master.perf-platform.svc.cluster.local"
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            jmeter -n -t /testplans/blazeDemoTest.xml -R jmeter-slave-0.perf-platform.svc.cluster.local,jmeter-slave-1.perf-platform.svc.cluster.local -l /results/results.jtl
+            sleep 3600
+      volumes:
+        - name: jmeter-test-plans
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jmeter-slave
+  namespace: perf-platform
+spec:
+  ports:
+    - port: 1099
+      targetPort: 1099
+  selector:
+    app: jmeter-slave

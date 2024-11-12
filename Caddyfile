@@ -1,0 +1,9 @@
+{
+    auto_https disable_redirects
+    admin 127.0.0.1:2020
+}
+
+testorch-backend.com:8442 {
+    reverse_proxy 127.0.0.1:5000
+    tls internal
+}

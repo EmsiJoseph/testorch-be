@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jmeter-master
+  namespace: perf-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jmeter-master
+  template:
+    metadata:
+      labels:
+        app: jmeter-master
+    spec:
+      containers:
+        - name: jmeter-master
+          image: acpojol/custom-jmeter-master:latest
+          ports:
+            - containerPort: 60000
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-credentials
+                  key: GITHUB_ACCESS_TOKEN
+            - name: GITHUB_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: github-credentials
+                  key: GITHUB_API_URL
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              # Fetch the specified JMX file from GitHub
+              JMX_URL="https://raw.githubusercontent.com/EmsiJoseph/centralized-testorch-repository/main/auth0%7C6729e51d69869a352fdc0728/teams/1234fasfsaf1412fsa/projects/fasfs123/test-plans/blazeDemoTest/blazeDemoTest.jmx"
+              FILE_NAME="blazeDemoTest.xml"
+
+              # mkdir -p /testplans && cd /testplans
+              # curl -L "$JMX_URL" -o "$FILE_NAME"
+
+              # # Execute the JMX test plan
+              # jmeter -n -t "/testplans/$FILE_NAME" -l /results/results.jtl
+
+              # Keep the container alive for debugging purposes
+              sleep 3600
+          volumeMounts:
+            - name: jmeter-test-plans
+              mountPath: /testplans
+      volumes:
+        - name: jmeter-test-plans
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jmeter-master
+  namespace: perf-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 60000
+      targetPort: 60000
+  selector:
+    app: jmeter-master

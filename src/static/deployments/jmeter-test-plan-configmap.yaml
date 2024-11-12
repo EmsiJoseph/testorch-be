@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jmeter-test-plan
+data:
+  test-plan.jmx: |
+   

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jmeter-master
+  namespace: perf-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jmeter-master
+  template:
+    metadata:
+      labels:
+        app: jmeter-master
+    spec:
+      containers:
+        - name: jmeter-master
+          image: justb4/jmeter:latest
+          ports:
+            - containerPort: 60000
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              # Fetch the specified JMX file from GitHub
+              JMX_URL="PLACEHOLDER_JMX_URL"
+              FILE_NAME="PLACEHOLDER_FILE_NAME.xml"
+
+              # mkdir -p /testplans && cd /testplans
+              curl -L "$JMX_URL" -o /testplans/"$FILE_NAME"
+
+              # # Execute the JMX test plan
+              jmeter -n -t "/testplans/$FILE_NAME" -l /results/results.jtl
+
+              # Keep the container alive for debugging purposes
+              sleep 3600
+          volumeMounts:
+            - name: jmeter-test-plans
+              mountPath: /testplans
+      volumes:
+        - name: jmeter-test-plans
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jmeter-master
+  namespace: perf-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 60000
+      targetPort: 60000
+  selector:
+    app: jmeter-master
