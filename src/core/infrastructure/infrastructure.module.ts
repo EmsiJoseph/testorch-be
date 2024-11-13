@@ -12,10 +12,11 @@ import { TeamRepository } from './repositories/team/team.repository';
 import { TestPlanRepositoryV2 } from './repositories/test-plan/test-plan.repository-v2'; // Import TestPlanRepositoryV2
 import { UsersRepository } from './repositories/users/users.repository';
 import { Auth0Service } from './services/auth0/auth0.service';
+import { GatewayService } from './services/gateway/gateway.service';
 import { GitHubService } from './services/github/github.service';
+import { JenkinsGateway } from './services/jenkins/jenkins.gateway';
 import { KubernetesV2Service } from './services/kubernetes/kubernetes-v2.service';
 import { SetupService } from './services/setup.service';
-import { GatewayService } from './services/gateway/gateway.service';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { GatewayService } from './services/gateway/gateway.service';
     TestPlanRepositoryV2, // Register TestPlanService as a provider
     SetupService,
     GatewayService,
+    JenkinsGateway,
   ],
   exports: [
     TeamRepository,
@@ -65,6 +67,7 @@ import { GatewayService } from './services/gateway/gateway.service';
     TestPlanRepositoryV2,
     SetupService,
     GatewayService,
+    JenkinsGateway,
   ],
 })
 export class InfrastructureModule {}

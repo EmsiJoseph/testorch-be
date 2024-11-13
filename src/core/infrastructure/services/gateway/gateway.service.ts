@@ -1,11 +1,24 @@
-
 import { Injectable } from '@nestjs/common';
+import {
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  WebSocketGateway,
+  WebSocketServer
+} from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { WebSocketGateway, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
 
 @Injectable()
-@WebSocketGateway()
-export class GatewayService implements OnGatewayConnection, OnGatewayDisconnect {
+@WebSocketGateway({
+  cors: {
+    origin: 'https://testorch.com:8443', // Replace with your frontend URL
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type'],
+    credentials: true, // Include credentials if needed
+  },
+})
+export class GatewayService
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 

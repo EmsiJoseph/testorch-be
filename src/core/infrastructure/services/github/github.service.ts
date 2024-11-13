@@ -51,11 +51,14 @@ export class GitHubService {
     }
   }
 
-  async deleteTestPlanFromTestorchJob(path: string, sha: string): Promise<any> {
-    const url = `${this.githubApiUrl}/${path}`;
+  async deleteTestPlanFromTestorchJob(path: string, sha: string): Promise<void> {
+    const url = `${this.githubApiUrlTestorchJob}${path}`;
+
+    console.log("URLL: ", url)
+    
 
     try {
-      const response = await firstValueFrom(
+       await firstValueFrom(
         this.httpService.delete(url, {
           headers: {
             Authorization: `token ${this.token}`,
@@ -67,8 +70,6 @@ export class GitHubService {
         }),
       );
 
-      console.log('GitHub API Response:', response.data);
-      return response.data;
     } catch (error) {
       console.error(
         'Error deleting test plan:',
