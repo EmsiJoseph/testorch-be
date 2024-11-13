@@ -72,6 +72,7 @@ export async function startTestPlanV3UseCase(
 
   const fileName = res.content.name;
   const filePath = res.content.path;
+  console.log("File path: ", filePath);
   const fileSha = res.content.sha;
 
   // Trigger Jenkins job through Jenkins service
@@ -93,21 +94,42 @@ export async function startTestPlanV3UseCase(
     jenkinsService.monitorBuild(queueUrl, async (buildData) => {
       if (buildData.result) {
         // Log build completion
-        gatewayService.sendMessage('buildStatus', { message: 'Build completed', buildData });
+        gatewayService.sendMessage('buildStatus', { message: 'Build completed' });
+        gatewayService.sendMessage('buildProgress', { progress: "100", remainingTime: "0" });
 
         // Delete the test plan after the build is completed
-        await githubService.deleteTestPlanFromTestorchJob(filePath, fileSha);
+        try {
+          await githubService.deleteTestPlanFromTestorchJob(filePath, fileSha);
+          console.log('Test plan deleted successfully');
+        } catch (error) {
+          console.error(`Failed to delete test plan: ${error.message}`);
+        }
 
         // Get the pods related to the build
         const buildName = `testorch-job-${buildData.number}`;
         const pods = await kubernetesV2Service.getPodsByBuildName(buildName);
-        gatewayService.sendMessage('podsStatus', { message: 'Pods status', pods });
+        let workerCount = 0;
+        const podStatuses = pods.map(pod => {
+          let type = 'agent';
+          if (pod.metadata?.name?.includes('master')) {
+            type = 'controller';
+          } else if (pod.metadata?.name?.includes('slave')) {
+            workerCount += 1;
+            type = `worker ${workerCount}`;
+          }
+          return {
+            id: pod.metadata?.name || 'unknown',
+            type,
+            status: pod.status.phase,
+          };
+        });
+        gatewayService.sendMessage('podsStatus', podStatuses );
 
         // Resolve the promise with the build status
         resolve({ message: 'Test completed successfully', buildData });
       } else {
         // Log build progress
-        gatewayService.sendMessage('buildStatus', { message: 'Build in progress', buildData });
+        gatewayService.sendMessage('buildStatus', { message: 'Build in progress' });
       }
     });
   });
