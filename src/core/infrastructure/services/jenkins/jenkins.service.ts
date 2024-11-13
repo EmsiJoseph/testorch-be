@@ -4,6 +4,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { Buffer } from 'buffer';
 import { GatewayService } from '../gateway/gateway.service'; // Import GatewayService
+import { KubernetesV2Service } from '../kubernetes/kubernetes-v2.service'; // Import KubernetesV2Service
 
 @Injectable()
 export class JenkinsService {
@@ -17,6 +18,7 @@ export class JenkinsService {
     private readonly configService: ConfigService,
     private readonly httpService: HttpService, // Inject HttpService
     private readonly gatewayService: GatewayService, // Inject GatewayService
+    private readonly kubernetesV2Service: KubernetesV2Service, // Inject KubernetesV2Service
   ) {
     this.jenkinsMasterUrl = this.configService.get<string>('JENKINS_MASTER_URL');
     this.jenkinsJobName = this.configService.get<string>('JENKINS_JOB_NAME');
@@ -129,6 +131,10 @@ export class JenkinsService {
       );
       return response.data;
     } catch (error) {
+      if (error.response?.status === 404) {
+        this.logger.warn(`Queue item not found: ${queueUrl}`);
+        return null;
+      }
       this.logger.error(`Error fetching Jenkins queue item status: ${error.message}`, error.stack);
       throw new Error(`Error fetching Jenkins queue item status: ${error.message}`);
     }
@@ -141,9 +147,15 @@ export class JenkinsService {
     const poll = async () => {
       try {
         const queueItemStatus = await this.getQueueItemStatus(queueUrl);
+        if (queueItemStatus === null) {
+          this.logger.warn('Queue item not found, returning build data.');
+          callback({ result: 'NOT_FOUND' });
+          return;
+        }
+
         if (queueItemStatus.cancelled) {
           this.logger.error('Jenkins job was cancelled.');
-          this.gatewayService.sendMessage('buildStatus', { message: 'Jenkins job was cancelled.' });
+          this.sendMessage('buildStatus', { message: 'Jenkins job was cancelled.' });
           callback({ result: 'CANCELLED' });
           return;
         }
@@ -158,28 +170,69 @@ export class JenkinsService {
             }),
           );
           const buildData = response.data;
-          this.logger.log(`Build status: ${JSON.stringify(buildData)}`);
-          this.gatewayService.sendMessage('buildStatus', { message: 'Build in progress', buildData });
-          callback(buildData);
+          const buildName = `testorch-job-${buildData.number}`;
+
+          this.logger.log('Build in progress');
+          this.sendMessage('buildStatus', { message: 'Build in progress' });
+
+          // Calculate progress
+          const elapsedTime = Date.now() - buildData.timestamp;
+          const estimatedDuration = buildData.estimatedDuration;
+          const progress = Math.min((elapsedTime / estimatedDuration) * 100, 100).toFixed(2);
+          const remainingTime = Math.max((estimatedDuration - elapsedTime) / 60000, 0).toFixed(2); // in minutes
+
+          this.sendMessage('buildProgress', { progress, remainingTime });
+
+          // Continuously fetch pod statuses
+          const fetchPodStatuses = async () => {
+            const pods = await this.kubernetesV2Service.getPodsByBuildName(buildName);
+            let workerCount = 0;
+            const podStatuses = pods.map(pod => {
+              let type = 'agent';
+              if (pod.metadata?.name?.includes('master')) {
+                type = 'controller';
+              } else if (pod.metadata?.name?.includes('slave')) {
+                workerCount += 1;
+                type = `worker ${workerCount}`;
+              }
+              return {
+                id: pod.metadata?.name || 'unknown',
+                type,
+                status: pod.status.phase,
+              };
+            });
+            this.sendMessage('podsStatus', podStatuses );
+          };
+
+          fetchPodStatuses();
 
           if (!buildData.result) {
             setTimeout(poll, delay);
             delay = Math.min(delay * 2, 60000); // Exponential backoff, max 1 minute
+          } else {
+            this.logger.log('Build completed successfully');
+            this.sendMessage('buildStatus', { message: 'Build completed successfully' });
+            callback(buildData);
           }
         } else {
           this.logger.log('Job is still in the queue.');
-          this.gatewayService.sendMessage('buildStatus', { message: 'Job is still in the queue.' });
+          this.sendMessage('buildStatus', { message: 'Job is still in the queue.' });
           setTimeout(poll, delay);
           delay = Math.min(delay * 2, 60000); // Exponential backoff, max 1 minute
         }
       } catch (error) {
         this.logger.error(`Error fetching Jenkins build status: ${error.message}`, error.stack);
-        this.gatewayService.sendMessage('buildStatus', { message: `Error fetching Jenkins build status: ${error.message}` });
+        this.sendMessage('buildStatus', { message: `Error fetching Jenkins build status: ${error.message}` });
         setTimeout(poll, delay);
         delay = Math.min(delay * 2, 60000); // Exponential backoff, max 1 minute
       }
     };
 
     poll();
+  }
+
+  private sendMessage(event: string, message: any) {
+    this.logger.log(`Sending message: ${event} - ${JSON.stringify(message)}`);
+    this.gatewayService.sendMessage(event, message);
   }
 }

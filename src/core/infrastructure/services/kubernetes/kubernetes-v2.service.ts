@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { KubeConfig, CoreV1Api } from '@kubernetes/client-node';
@@ -18,9 +17,8 @@ export class KubernetesV2Service {
   async getPodsByBuildName(buildName: string): Promise<any> {
     try {
       const namespace = "perf-platform";
-      const labelSelector = `app=${buildName}`;
-      const response = await this.coreV1Api.listNamespacedPod(namespace, undefined, undefined, undefined, undefined, labelSelector);
-      return response.body.items;
+      const response = await this.coreV1Api.listNamespacedPod(namespace);
+      return response.body.items.filter(pod => pod.metadata?.name?.includes(buildName));
     } catch (error) {
       this.logger.error(`Error fetching pods for build name ${buildName}: ${error.message}`, error.stack);
       throw new Error(`Error fetching pods for build name ${buildName}: ${error.message}`);
