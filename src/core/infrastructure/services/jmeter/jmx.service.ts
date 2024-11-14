@@ -22,29 +22,43 @@ export class JmxService {
   ) {
     try {
       // Step 1: Retrieve Test Plan by name and project name
-      const testPlan = await this.testPlanRepo.getTestPlanByNameAndProjectName(testPlanName, projectName);
+      const testPlan = await this.testPlanRepo.getTestPlanByNameAndProjectName(
+        testPlanName,
+        projectName,
+      );
       if (!testPlan) {
         throw new Error('Test plan not found');
       }
 
       // Step 2: Use GitHubService to get the uploaded test plan content
-      const pathInRepo = testPlan.location; // Assuming the location holds the path in GitHub
-      this.logger.log(`Attempting to fetch file from GitHub at path: ${pathInRepo}`);
+      const pathInRepo = testPlan.location;
+      this.logger.log(
+        `Attempting to fetch file from GitHub at path: ${pathInRepo}`,
+      );
 
-      const fileContentResponse = await this.githubService.getUploadedTestPlan(pathInRepo);
+      const fileContentResponse =
+        await this.githubService.getUploadedTestPlan(pathInRepo);
       if (!fileContentResponse.content) {
         throw new Error('File content not found in GitHub response');
       }
 
-      const fileContents = Buffer.from(fileContentResponse.content, 'base64').toString('utf-8');
+      const fileContents = Buffer.from(
+        fileContentResponse.content,
+        'base64',
+      ).toString('utf-8');
 
       // Step 3: Parse the JMX file content
-      const parser = new XMLParser();
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+      });
       const jmxData = parser.parse(fileContents);
 
       // Step 4: Validate JMX Structure
       if (!jmxData.jmeterTestPlan) {
-        throw new Error('Invalid JMX file: Missing jmeterTestPlan root element');
+        throw new Error(
+          'Invalid JMX file: Missing jmeterTestPlan root element',
+        );
       }
 
       // Step 5: Extract Thread Groups
@@ -61,32 +75,80 @@ export class JmxService {
 
       // Step 8: Create Response
       const threadGroupDetails = threadGroups.map((tg: any) => {
-        let virtualUsers = 0;
-        let threadGroupName = tg['@_testname'] || 'Unnamed Thread Group';
-      
-        if (tg['stringProp']) {
-          if (Array.isArray(tg['stringProp'])) {
-            const numThreads = tg['stringProp'].find(
-              (prop: any) => prop['@_name'] === 'ThreadGroup.num_threads'
+        let virtualUsers: number | null = null;
+        let rampUpTime: number | null = null;
+        let holdLoadTime: number | null = null;
+        let shutdownTime: number | null = null;
+        const threadGroupName = tg['@_testname'] || 'Unnamed Thread Group';
+
+        if (
+          tg['@_testclass'] === 'kg.apc.jmeter.threads.UltimateThreadGroup'
+        ) {
+          // Handle Ultimate Thread Group
+          if (
+            tg['collectionProp'] &&
+            tg['collectionProp']['collectionProp']
+          ) {
+            const ultimateThreadData = tg['collectionProp']['collectionProp'];
+
+            if (ultimateThreadData && Array.isArray(ultimateThreadData['stringProp'])) {
+              ultimateThreadData['stringProp'].forEach((param: any) => {
+                const paramName = param['@_name'];
+                const paramValue = param['#text'];
+
+                // Ensure the param value is a string before trimming and parsing
+                if (typeof paramValue === 'string') {
+                  const parsedValue = parseInt(paramValue.trim(), 10);
+                  this.logger.log(
+                    `Examining param with name: ${paramName}, extracted value: ${parsedValue}`
+                  );
+
+                  switch (paramName) {
+                    case '472454735': // Thread Count
+                      virtualUsers = parsedValue;
+                      break;
+                    case '-502180566': // Ramp Up Time
+                      rampUpTime = parsedValue;
+                      break;
+                    case '1786598548': // Hold Load Time
+                      holdLoadTime = parsedValue;
+                      break;
+                    case '2015913763': // Shutdown Time
+                      shutdownTime = parsedValue;
+                      break;
+                    default:
+                      this.logger.warn(
+                        `Unknown parameter name: ${paramName}`
+                      );
+                  }
+                } else {
+                  this.logger.warn(
+                    `Parameter '#text' is not a string or is undefined for name: ${paramName}`
+                  );
+                }
+              });
+            } else {
+              this.logger.warn(
+                'Failed to locate stringProp elements in Ultimate Thread Group.',
+              );
+            }
+          } else {
+            this.logger.warn(
+              'Ultimate Thread Group does not have expected nested collectionProp.',
             );
-            if (numThreads) {
-              virtualUsers = parseInt(numThreads['#text'], 10);
-            }
-          } else if (typeof tg['stringProp'] === 'object') {
-            // Handle the case where stringProp is a single object
-            if (tg['stringProp']['@_name'] === 'ThreadGroup.num_threads') {
-              virtualUsers = parseInt(tg['stringProp']['#text'], 10);
-            }
           }
         }
-      
+
         return {
           name: threadGroupName,
           virtualUsers: virtualUsers,
+          rampUpTime: rampUpTime,
+          holdLoadTime: holdLoadTime,
+          shutdownTime: shutdownTime,
           host: hostInfo,
         };
       });
-      
+
       return {
         message: 'Thread group extracted successfully',
         testPlanName: testPlanName,
@@ -147,7 +209,9 @@ export class JmxService {
       }
       if (tree['hashTree']) {
         if (Array.isArray(tree['hashTree'])) {
-          return tree['hashTree'].some((subTree: any) => findBackendListener(subTree));
+          return tree['hashTree'].some((subTree: any) =>
+            findBackendListener(subTree),
+          );
         } else {
           return findBackendListener(tree['hashTree']);
         }
@@ -170,7 +234,7 @@ export class JmxService {
     const findHostInfo = (tree: any) => {
       if (tree['HTTPSamplerProxy']) {
         const host = tree['HTTPSamplerProxy']['stringProp'].find(
-          (prop: any) => prop['@_name'] === 'HTTPSampler.domain'
+          (prop: any) => prop['@_name'] === 'HTTPSampler.domain',
         );
         if (host) {
           hostInfo = host['#text'];
