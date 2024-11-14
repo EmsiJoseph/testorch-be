@@ -34,7 +34,7 @@ export class ProjectController {
     return { message: 'Project created successfully', data: result };
   }
 
-  @UseGuards(AuthorizationGuard)
+  // @UseGuards(AuthorizationGuard)
   @Get('get-projects/:auth0OrgId')
   async getProjects(@Param('auth0OrgId') auth0OrgId: string) {
     const result = await getProjectsUseCase(

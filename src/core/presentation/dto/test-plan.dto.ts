@@ -57,3 +57,9 @@ export class StartTestV2Dto {
   shutdownTime: number;
   targetThroughputPerMin: number;
 }
+export class ExtractThreadGroupDto {
+  email: string;
+  fileName: string;
+  name: string;
+  projectName: string;
+}
