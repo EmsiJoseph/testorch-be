@@ -1,10 +1,9 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
 import { Buffer } from 'buffer';
+import { firstValueFrom } from 'rxjs';
 import { GatewayService } from '../gateway/gateway.service'; // Import GatewayService
-import { KubernetesV2Service } from '../kubernetes/kubernetes-v2.service'; // Import KubernetesV2Service
 import { KubernetesV2Service } from '../kubernetes/kubernetes-v2.service'; // Import KubernetesV2Service
 
 @Injectable()
@@ -21,9 +20,9 @@ export class JenkinsService {
     private readonly httpService: HttpService, // Inject HttpService
     private readonly gatewayService: GatewayService, // Inject GatewayService
     private readonly kubernetesV2Service: KubernetesV2Service, // Inject KubernetesV2Service
-    private readonly kubernetesV2Service: KubernetesV2Service, // Inject KubernetesV2Service
   ) {
-    this.jenkinsMasterUrl = this.configService.get<string>('JENKINS_MASTER_URL');
+    this.jenkinsMasterUrl =
+      this.configService.get<string>('JENKINS_MASTER_URL');
     this.jenkinsJobName = this.configService.get<string>('JENKINS_JOB_NAME');
     this.jenkinsApiToken = this.configService.get<string>('JENKINS_API_TOKEN');
     this.jenkinsUsername = this.configService.get<string>('JENKINS_USERNAME');
@@ -73,10 +72,14 @@ export class JenkinsService {
       targetThroughputPerMin: targetThroughputPerMin.toString(),
     });
 
-    const auth = Buffer.from(`${jenkinsUsername}:${jenkinsApiToken}`).toString('base64');
+    const auth = Buffer.from(`${jenkinsUsername}:${jenkinsApiToken}`).toString(
+      'base64',
+    );
 
     try {
-      this.logger.log(`Triggering Jenkins job at ${jenkinsJobUrl} with params: ${jobParams.toString()}`);
+      this.logger.log(
+        `Triggering Jenkins job at ${jenkinsJobUrl} with params: ${jobParams.toString()}`,
+      );
 
       // Trigger the Jenkins job
       const response = await firstValueFrom(
@@ -92,21 +95,32 @@ export class JenkinsService {
       );
 
       if (response.status !== 201) {
-        this.logger.error(`Failed to trigger Jenkins job: ${response.statusText}`);
-        throw new Error(`Failed to trigger Jenkins job: ${response.statusText}`);
+        this.logger.error(
+          `Failed to trigger Jenkins job: ${response.statusText}`,
+        );
+        throw new Error(
+          `Failed to trigger Jenkins job: ${response.statusText}`,
+        );
       }
 
       const queueUrl = response.headers['location'];
-      this.logger.log(`Jenkins job triggered successfully. Queue URL: ${queueUrl}`);
+      this.logger.log(
+        `Jenkins job triggered successfully. Queue URL: ${queueUrl}`,
+      );
       return { queueUrl };
     } catch (error) {
-      this.logger.error(`Error triggering Jenkins job: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error triggering Jenkins job: ${error.message}`,
+        error.stack,
+      );
       throw new Error(`Error triggering Jenkins job: ${error.message}`);
     }
   }
 
   async getBuildStatus(queueUrl: string): Promise<any> {
-    const auth = Buffer.from(`${this.jenkinsUsername}:${this.jenkinsApiToken}`).toString('base64');
+    const auth = Buffer.from(
+      `${this.jenkinsUsername}:${this.jenkinsApiToken}`,
+    ).toString('base64');
     try {
       const response = await firstValueFrom(
         this.httpService.get(queueUrl, {
@@ -117,20 +131,28 @@ export class JenkinsService {
       );
       return response.data;
     } catch (error) {
-      this.logger.error(`Error fetching Jenkins build status: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error fetching Jenkins build status: ${error.message}`,
+        error.stack,
+      );
       throw new Error(`Error fetching Jenkins build status: ${error.message}`);
     }
   }
 
   async getQueueItemStatus(queueUrl: string): Promise<any> {
-    const auth = Buffer.from(`${this.jenkinsUsername}:${this.jenkinsApiToken}`).toString('base64');
+    const auth = Buffer.from(
+      `${this.jenkinsUsername}:${this.jenkinsApiToken}`,
+    ).toString('base64');
     try {
       const response = await firstValueFrom(
-        this.httpService.get(`${queueUrl}api/json?tree=cancelled,executable[url]`, {
-          headers: {
-            Authorization: `Basic ${auth}`,
+        this.httpService.get(
+          `${queueUrl}api/json?tree=cancelled,executable[url]`,
+          {
+            headers: {
+              Authorization: `Basic ${auth}`,
+            },
           },
-        }),
+        ),
       );
       return response.data;
     } catch (error) {
@@ -142,14 +164,25 @@ export class JenkinsService {
         this.logger.warn(`Queue item not found: ${queueUrl}`);
         return null;
       }
-      this.logger.error(`Error fetching Jenkins queue item status: ${error.message}`, error.stack);
-      throw new Error(`Error fetching Jenkins queue item status: ${error.message}`);
+      this.logger.error(
+        `Error fetching Jenkins queue item status: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(
+        `Error fetching Jenkins queue item status: ${error.message}`,
+      );
     }
   }
 
-  async monitorBuild(slaveCount: number, queueUrl: string, callback: (data: any) => void): Promise<void> {
+  async monitorBuild(
+    slaveCount: number,
+    queueUrl: string,
+    callback: (data: any) => void,
+  ): Promise<void> {
     this.stopMonitoring = false; // Reset the flag when starting monitoring
-    const auth = Buffer.from(`${this.jenkinsUsername}:${this.jenkinsApiToken}`).toString('base64');
+    const auth = Buffer.from(
+      `${this.jenkinsUsername}:${this.jenkinsApiToken}`,
+    ).toString('base64');
 
     const poll = async () => {
       if (this.stopMonitoring) {
@@ -168,8 +201,12 @@ export class JenkinsService {
 
         if (queueItemStatus.cancelled) {
           this.logger.error('Jenkins job was cancelled.');
-          this.sendMessage('buildStatus', { message: 'Jenkins job was cancelled.' });
-          this.sendMessage('buildStatus', { message: 'Jenkins job was cancelled.' });
+          this.sendMessage('buildStatus', {
+            message: 'Jenkins job was cancelled.',
+          });
+          this.sendMessage('buildStatus', {
+            message: 'Jenkins job was cancelled.',
+          });
           callback({ result: 'CANCELLED' });
           return;
         }
@@ -193,9 +230,10 @@ export class JenkinsService {
 
           // Continuously fetch pod statuses
           const fetchPodStatuses = async () => {
-            const pods = await this.kubernetesV2Service.getPodsByBuildName(buildName);
+            const pods =
+              await this.kubernetesV2Service.getPodsByBuildName(buildName);
             workerCount = 0; // Reset workerCount for each fetch
-            const podStatuses = pods.map(pod => {
+            const podStatuses = pods.map((pod) => {
               let type = 'agent';
               if (pod.metadata?.name?.includes('master')) {
                 type = 'controller';
@@ -216,8 +254,14 @@ export class JenkinsService {
               // Calculate progress only if all worker nodes are running
               const elapsedTime = Date.now() - buildData.timestamp;
               const estimatedDuration = buildData.estimatedDuration;
-              const progress = Math.min((elapsedTime / estimatedDuration) * 100, 100).toFixed(2);
-              const remainingTime = Math.max((estimatedDuration - elapsedTime) / 60000, 0).toFixed(2); // in minutes
+              const progress = Math.min(
+                (elapsedTime / estimatedDuration) * 100,
+                100,
+              ).toFixed(2);
+              const remainingTime = Math.max(
+                (estimatedDuration - elapsedTime) / 60000,
+                0,
+              ).toFixed(2); // in minutes
               this.sendMessage('buildProgress', { progress, remainingTime });
 
               if (progress === '100.00') {
@@ -234,32 +278,38 @@ export class JenkinsService {
               setImmediate(poll); // No delay, use setImmediate to continue polling
             } else {
               this.logger.log('All worker nodes are running.');
-              this.sendMessage('buildStatus', { message: 'All worker nodes are running.' });
+              this.sendMessage('buildStatus', {
+                message: 'All worker nodes are running.',
+              });
             }
           } else {
             this.logger.log('Build completed successfully');
-            this.sendMessage('buildStatus', { message: 'Build completed successfully' });
+            this.sendMessage('buildStatus', {
+              message: 'Build completed successfully',
+            });
             callback(buildData);
             this.stopMonitoring = true; // Stop monitoring when the build is completed
           }
         } else {
           this.logger.log('Job is still in the queue.');
-          this.sendMessage('buildStatus', { message: 'Job is still in the queue.' });
+          this.sendMessage('buildStatus', {
+            message: 'Job is still in the queue.',
+          });
           setImmediate(poll); // No delay, use setImmediate to continue polling
         }
       } catch (error) {
-        this.logger.error(`Error fetching Jenkins build status: ${error.message}`, error.stack);
-        this.sendMessage('buildStatus', { message: `Error fetching Jenkins build status: ${error.message}` });
+        this.logger.error(
+          `Error fetching Jenkins build status: ${error.message}`,
+          error.stack,
+        );
+        this.sendMessage('buildStatus', {
+          message: `Error fetching Jenkins build status: ${error.message}`,
+        });
         setImmediate(poll); // No delay, use setImmediate to continue polling
       }
     };
 
     poll();
-  }
-
-  private sendMessage(event: string, message: any) {
-    this.logger.log(`Sending message: ${event} - ${JSON.stringify(message)}`);
-    this.gatewayService.sendMessage(event, message);
   }
 
   private sendMessage(event: string, message: any) {
