@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { XMLParser } from 'fast-xml-parser';
 import { GitHubService } from '../github/github.service';
-import { IUsersRepository } from 'src/core/application/interfaces/repositories/users.repository.interface';
 import * as dotenv from 'dotenv';
+import { TestPlanRepositoryV2 } from '../../repositories/test-plan/test-plan.repository-v2';
 
 dotenv.config(); // Load environment variables
 
@@ -12,26 +12,23 @@ export class JmxService {
 
   constructor(
     private readonly githubService: GitHubService,
-    private readonly userRepo: IUsersRepository,
+    private readonly testPlanRepo: TestPlanRepositoryV2,
   ) {}
 
   // Function to fetch the JMX file from GitHub and parse it
   async extractThreadGroupsFromGitHub(
-    email: string,
     projectName: string,
     testPlanName: string,
-    fileName: string
   ) {
     try {
-      // Step 1: Find user by email to get userId
-      const user = await this.userRepo.getUserByEmail(email);
-      if (!user) {
-        throw new Error('User not found');
+      // Step 1: Retrieve Test Plan by name and project name
+      const testPlan = await this.testPlanRepo.getTestPlanByNameAndProjectName(testPlanName, projectName);
+      if (!testPlan) {
+        throw new Error('Test plan not found');
       }
-      const userId = user.id;
 
       // Step 2: Use GitHubService to get the uploaded test plan content
-      const pathInRepo = `${userId}/teams/${projectName}/projects/${testPlanName}/${fileName}`;
+      const pathInRepo = testPlan.location; // Assuming the location holds the path in GitHub
       this.logger.log(`Attempting to fetch file from GitHub at path: ${pathInRepo}`);
 
       const fileContentResponse = await this.githubService.getUploadedTestPlan(pathInRepo);
@@ -64,20 +61,37 @@ export class JmxService {
 
       // Step 8: Create Response
       const threadGroupDetails = threadGroups.map((tg: any) => {
-        const numThreads = tg['stringProp'].find(
-          (prop: any) => prop['@_name'] === 'ThreadGroup.num_threads'
-        );
+        let virtualUsers = 0;
+        let threadGroupName = tg['@_testname'] || 'Unnamed Thread Group';
+      
+        if (tg['stringProp']) {
+          if (Array.isArray(tg['stringProp'])) {
+            const numThreads = tg['stringProp'].find(
+              (prop: any) => prop['@_name'] === 'ThreadGroup.num_threads'
+            );
+            if (numThreads) {
+              virtualUsers = parseInt(numThreads['#text'], 10);
+            }
+          } else if (typeof tg['stringProp'] === 'object') {
+            // Handle the case where stringProp is a single object
+            if (tg['stringProp']['@_name'] === 'ThreadGroup.num_threads') {
+              virtualUsers = parseInt(tg['stringProp']['#text'], 10);
+            }
+          }
+        }
+      
         return {
-          name: tg['@_testname'] || 'Unnamed Thread Group',
-          virtualUsers: numThreads ? parseInt(numThreads['#text'], 10) : 0,
+          name: threadGroupName,
+          virtualUsers: virtualUsers,
           host: hostInfo,
         };
       });
-
+      
       return {
         message: 'Thread group extracted successfully',
-        data: threadGroupDetails,
-        backendListener: hasBackendListener,
+        testPlanName: testPlanName,
+        backendListenerExists: hasBackendListener,
+        threadGroups: threadGroupDetails,
       };
     } catch (error) {
       this.logger.error('Error extracting data from JMX file:', error.message);

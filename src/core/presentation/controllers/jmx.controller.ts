@@ -11,15 +11,15 @@ export class JmxController {
 
   @Post('extract-thread-group')
   async extractThreadGroup(@Body() body: ExtractThreadGroupDto) {
-    const { email, projectName, name, fileName } = body;
+    const { projectName, name } = body;
 
     try {
-      if (!email || !projectName || !name || !fileName) {
+      if (!projectName || !name) {
         throw new Error('Missing required parameters in the request body.');
       }
 
       this.logger.log(`Received request to extract thread group for test plan: ${name}`);
-      const result = await this.jmxService.extractThreadGroupsFromGitHub(email, projectName, name, fileName);
+      const result = await this.jmxService.extractThreadGroupsFromGitHub(projectName, name);
       return result;
     } catch (error) {
       this.logger.error('Error extracting thread group:', error.message);
