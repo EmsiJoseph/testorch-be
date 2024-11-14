@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { Buffer } from 'buffer';
 import { GatewayService } from '../gateway/gateway.service'; // Import GatewayService
 import { KubernetesV2Service } from '../kubernetes/kubernetes-v2.service'; // Import KubernetesV2Service
+import { KubernetesV2Service } from '../kubernetes/kubernetes-v2.service'; // Import KubernetesV2Service
 
 @Injectable()
 export class JenkinsService {
@@ -19,6 +20,7 @@ export class JenkinsService {
     private readonly configService: ConfigService,
     private readonly httpService: HttpService, // Inject HttpService
     private readonly gatewayService: GatewayService, // Inject GatewayService
+    private readonly kubernetesV2Service: KubernetesV2Service, // Inject KubernetesV2Service
     private readonly kubernetesV2Service: KubernetesV2Service, // Inject KubernetesV2Service
   ) {
     this.jenkinsMasterUrl = this.configService.get<string>('JENKINS_MASTER_URL');
@@ -136,6 +138,10 @@ export class JenkinsService {
         this.logger.warn(`Queue item not found: ${queueUrl}`);
         return null;
       }
+      if (error.response?.status === 404) {
+        this.logger.warn(`Queue item not found: ${queueUrl}`);
+        return null;
+      }
       this.logger.error(`Error fetching Jenkins queue item status: ${error.message}`, error.stack);
       throw new Error(`Error fetching Jenkins queue item status: ${error.message}`);
     }
@@ -162,6 +168,7 @@ export class JenkinsService {
 
         if (queueItemStatus.cancelled) {
           this.logger.error('Jenkins job was cancelled.');
+          this.sendMessage('buildStatus', { message: 'Jenkins job was cancelled.' });
           this.sendMessage('buildStatus', { message: 'Jenkins job was cancelled.' });
           callback({ result: 'CANCELLED' });
           return;
@@ -248,6 +255,11 @@ export class JenkinsService {
     };
 
     poll();
+  }
+
+  private sendMessage(event: string, message: any) {
+    this.logger.log(`Sending message: ${event} - ${JSON.stringify(message)}`);
+    this.gatewayService.sendMessage(event, message);
   }
 
   private sendMessage(event: string, message: any) {
