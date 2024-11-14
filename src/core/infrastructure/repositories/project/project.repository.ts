@@ -30,6 +30,7 @@ export class ProjectRepository implements IProjectRepository {
         .values({
           name: createProjectDto.name,
           description: createProjectDto.description,
+          auth0_org_id: createProjectDto.auth0_org_id,
           team_id: teamId,
           created_by: createdBy, // Include created_by
         })

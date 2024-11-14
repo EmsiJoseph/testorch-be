@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import {
-    ConnectedSocket,
-    MessageBody,
-    OnGatewayConnection,
-    OnGatewayDisconnect,
-    SubscribeMessage,
-    WebSocketGateway,
-    WebSocketServer,
+  ConnectedSocket,
+  MessageBody,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { startTestPlanV3UseCase } from 'src/core/application/use-cases/start-test-plan-v3.use-case';
@@ -20,6 +20,7 @@ import { KubernetesV2Service } from '../kubernetes/kubernetes-v2.service';
 import { JenkinsService } from './jenkins.service';
 
 @Injectable()
+// @UseGuards(SocketAuthorizationGuard)
 @WebSocketGateway({
   cors: {
     origin: 'https://testorch.com:8443', // Replace with your frontend URL

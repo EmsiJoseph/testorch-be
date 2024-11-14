@@ -13,6 +13,7 @@ export class JenkinsService {
   private readonly jenkinsJobName: string | undefined;
   private readonly jenkinsApiToken: string | undefined;
   private readonly jenkinsUsername: string | undefined;
+  private stopMonitoring = false; // Add a flag to stop monitoring
 
   constructor(
     private readonly configService: ConfigService,
@@ -140,16 +141,22 @@ export class JenkinsService {
     }
   }
 
-  async monitorBuild(queueUrl: string, callback: (data: any) => void): Promise<void> {
+  async monitorBuild(slaveCount: number, queueUrl: string, callback: (data: any) => void): Promise<void> {
+    this.stopMonitoring = false; // Reset the flag when starting monitoring
     const auth = Buffer.from(`${this.jenkinsUsername}:${this.jenkinsApiToken}`).toString('base64');
-    let delay = 5000; // Initial delay of 5 seconds
 
     const poll = async () => {
+      if (this.stopMonitoring) {
+        this.logger.log('Monitoring stopped.');
+        return;
+      }
+
       try {
         const queueItemStatus = await this.getQueueItemStatus(queueUrl);
         if (queueItemStatus === null) {
           this.logger.warn('Queue item not found, returning build data.');
           callback({ result: 'NOT_FOUND' });
+          this.sendMessage('testDone', true);
           return;
         }
 
@@ -175,18 +182,12 @@ export class JenkinsService {
           this.logger.log('Build in progress');
           this.sendMessage('buildStatus', { message: 'Build in progress' });
 
-          // Calculate progress
-          const elapsedTime = Date.now() - buildData.timestamp;
-          const estimatedDuration = buildData.estimatedDuration;
-          const progress = Math.min((elapsedTime / estimatedDuration) * 100, 100).toFixed(2);
-          const remainingTime = Math.max((estimatedDuration - elapsedTime) / 60000, 0).toFixed(2); // in minutes
-
-          this.sendMessage('buildProgress', { progress, remainingTime });
+          let workerCount = 0; // Declare workerCount here
 
           // Continuously fetch pod statuses
           const fetchPodStatuses = async () => {
             const pods = await this.kubernetesV2Service.getPodsByBuildName(buildName);
-            let workerCount = 0;
+            workerCount = 0; // Reset workerCount for each fetch
             const podStatuses = pods.map(pod => {
               let type = 'agent';
               if (pod.metadata?.name?.includes('master')) {
@@ -201,30 +202,48 @@ export class JenkinsService {
                 status: pod.status.phase,
               };
             });
-            this.sendMessage('podsStatus', podStatuses );
+            this.sendMessage('podsStatus', podStatuses);
+
+            if (workerCount >= slaveCount) {
+              this.sendMessage('testRunning', true);
+              // Calculate progress only if all worker nodes are running
+              const elapsedTime = Date.now() - buildData.timestamp;
+              const estimatedDuration = buildData.estimatedDuration;
+              const progress = Math.min((elapsedTime / estimatedDuration) * 100, 100).toFixed(2);
+              const remainingTime = Math.max((estimatedDuration - elapsedTime) / 60000, 0).toFixed(2); // in minutes
+              this.sendMessage('buildProgress', { progress, remainingTime });
+
+              if (progress === '100.00') {
+                this.sendMessage('testDone', true);
+                this.stopMonitoring = true; // Stop monitoring when the test is done
+              }
+            }
           };
 
-          fetchPodStatuses();
+          await fetchPodStatuses(); // Call fetchPodStatuses initially
 
           if (!buildData.result) {
-            setTimeout(poll, delay);
-            delay = Math.min(delay * 2, 60000); // Exponential backoff, max 1 minute
+            if (workerCount < slaveCount) {
+              setImmediate(poll); // No delay, use setImmediate to continue polling
+            } else {
+              this.logger.log('All worker nodes are running.');
+              this.sendMessage('buildStatus', { message: 'All worker nodes are running.' });
+            }
           } else {
             this.logger.log('Build completed successfully');
             this.sendMessage('buildStatus', { message: 'Build completed successfully' });
             callback(buildData);
+            this.stopMonitoring = true; // Stop monitoring when the build is completed
           }
         } else {
           this.logger.log('Job is still in the queue.');
           this.sendMessage('buildStatus', { message: 'Job is still in the queue.' });
-          setTimeout(poll, delay);
-          delay = Math.min(delay * 2, 60000); // Exponential backoff, max 1 minute
+          setImmediate(poll); // No delay, use setImmediate to continue polling
         }
       } catch (error) {
         this.logger.error(`Error fetching Jenkins build status: ${error.message}`, error.stack);
         this.sendMessage('buildStatus', { message: `Error fetching Jenkins build status: ${error.message}` });
-        setTimeout(poll, delay);
-        delay = Math.min(delay * 2, 60000); // Exponential backoff, max 1 minute
+        setImmediate(poll); // No delay, use setImmediate to continue polling
       }
     };
 

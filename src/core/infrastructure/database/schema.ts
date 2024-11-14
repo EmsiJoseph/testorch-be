@@ -61,6 +61,7 @@ export const projects = pgTable('project', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name').notNull(), // Project name
   description: varchar('description'), // Optional description
+  auth0_org_id: varchar('auth0_org_id'),
   team_id: uuid('team_id').notNull(), // Project can belong to a team
   created_by: text('created_by').notNull(), // The user who created the project
   created_at: timestamp('created_at').defaultNow(),

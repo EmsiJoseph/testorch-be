@@ -56,6 +56,7 @@ export async function startTestPlanV3UseCase(
     throw new Error('Test plan not found');
   }
 
+
   const { content, name } = await githubService.getUploadedTestPlan(location);
 
   if (!content) {
@@ -91,7 +92,7 @@ export async function startTestPlanV3UseCase(
 
   // Monitor Jenkins build through polling
   return new Promise((resolve) => {
-    jenkinsService.monitorBuild(queueUrl, async (buildData) => {
+    jenkinsService.monitorBuild(workerNodes, queueUrl, async (buildData) => {
       if (buildData.result) {
         // Log build completion
         gatewayService.sendMessage('buildStatus', { message: 'Build completed' });
