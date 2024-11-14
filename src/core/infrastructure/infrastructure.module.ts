@@ -13,6 +13,8 @@ import { TestPlanRepositoryV2 } from './repositories/test-plan/test-plan.reposit
 import { UsersRepository } from './repositories/users/users.repository';
 import { Auth0Service } from './services/auth0/auth0.service';
 import { GitHubService } from './services/github/github.service';
+import { JmxService } from './services/jmeter/jmx.service';
+
 import { KubernetesV2Service } from './services/kubernetes/kubernetes-v2.service';
 import { SetupService } from './services/setup.service';
 import { GatewayService } from './services/gateway/gateway.service';
@@ -50,6 +52,7 @@ import { GatewayService } from './services/gateway/gateway.service';
     TestPlanRepositoryV2, // Register TestPlanService as a provider
     SetupService,
     GatewayService,
+    JmxService,
   ],
   exports: [
     TeamRepository,
@@ -65,6 +68,7 @@ import { GatewayService } from './services/gateway/gateway.service';
     TestPlanRepositoryV2,
     SetupService,
     GatewayService,
+    JmxService,
   ],
 })
 export class InfrastructureModule {}
